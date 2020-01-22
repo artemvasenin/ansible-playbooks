@@ -1,0 +1,44 @@
+- hosts: all
+  become: true
+
+  tasks:
+    - name: Install required system packages
+      apt: name={{ item }} state=latest update_cache=yes
+      loop: [ 'apt-transport-https', 'ca-certificates', 'curl', 'gnupg2', 'software-properties-common', 'python-pip']
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/debian jessie stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt: update_cache=yes name=docker-ce state=latest
+    
+    - name: Get docker-compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/1.25.0/docker-compose-Linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: 0755	
+
+    - name: Change max_map_count
+      command:
+        cmd: sysctl -w vm.max_map_count=262144
+
+    - name: Start elastic container
+      command:
+        cmd: docker-compose -f /usr/share/skydns-django-website/configs/elastic/docker-compose.yml up --detach
+
+    - name: Create elastic indexes
+      command:
+        cmd: skydns-website-manage.py search_index --settings=skydns_website.website.elastic_settings --create
+      ignore_errors: True
+
+    - name: Rebuild elastic indexes
+      command:
+        cmd: skydns-website-manage.py search_index --settings=skydns_website.website.elastic_settings --rebuild -f
+
